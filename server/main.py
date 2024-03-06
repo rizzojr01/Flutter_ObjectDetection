@@ -36,9 +36,9 @@ class VideoTransformTrack(MediaStreamTrack):
         super().__init__()  # don't forget this!
         self.track = track
         self.transform = transform
-        self.model = torch.hub.load("ultralytics/yolov5", "yolov5s")
-        self.model.eval()
-        self.model.cuda()
+        # self.model = torch.hub.load("ultralytics/yolov5", "yolov5s")
+        # self.model.eval()
+        # self.model.cuda()
 
     async def recv(self):
         frame = await self.track.recv()
