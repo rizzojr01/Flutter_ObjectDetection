@@ -5,7 +5,8 @@ import logging
 import os
 import ssl
 import uuid
-os.add_dll_directory('C:/Users/thoma/anaconda3/envs/py38/DLLs') # For aiortc installed in editable mode (need to manually install opus & vpx), and when python cannot detect DLLs (opus, vpx)
+
+# os.add_dll_directory('C:/Users/thoma/anaconda3/envs/py38/DLLs') # For aiortc installed in editable mode (need to manually install opus & vpx), and when python cannot detect DLLs (opus, vpx)
 
 import cv2
 from aiohttp import web
@@ -44,19 +45,22 @@ class VideoTransformTrack(MediaStreamTrack):
         img = frame.to_ndarray(format="bgr24")
         img_yuv = frame.to_ndarray(format="yuv420p")
         height, width, _ = img.shape
-        blocksize = int(np.ceil(height*0.05))
+        blocksize = int(np.ceil(height * 0.05))
         Nblocks = 10
         timestamp = 0
-        margin = int(blocksize*0.25) # only average values inside margin
-        hexa_digit = ''
+        margin = int(blocksize * 0.25)  # only average values inside margin
+        hexa_digit = ""
         for i in range(Nblocks):
-            block = img_yuv[margin:blocksize-margin,i*blocksize+margin:blocksize*(i+1)-margin]
-            digit = np.round(np.mean(block[:,:]) / 32)
+            block = img_yuv[
+                margin : blocksize - margin,
+                i * blocksize + margin : blocksize * (i + 1) - margin,
+            ]
+            digit = np.round(np.mean(block[:, :]) / 32)
             hexa_digit += str(int(digit))
-            timestamp += 8**i*digit
-        print('Hexadecimal: ', hexa_digit)
-        print('Estimated Timestamp: ', timestamp)
-        cv2.imwrite('saved_frames/{}.jpg'.format(timestamp), img)
+            timestamp += 8**i * digit
+        print("Hexadecimal: ", hexa_digit)
+        print("Estimated Timestamp: ", timestamp)
+        cv2.imwrite("saved_frames/{}.jpg".format(timestamp), img)
 
         if self.transform == "cartoon":
 
@@ -96,22 +100,28 @@ class VideoTransformTrack(MediaStreamTrack):
             new_frame.time_base = frame.time_base
             return new_frame
         elif self.transform == "Detection":
-            img = cv2.resize(img, (640,640))
-            img_tensor = torch.tensor(img).unsqueeze(0).permute(0,3,1,2).float()/255.0
+            img = cv2.resize(img, (640, 640))
+            img_tensor = (
+                torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2).float() / 255.0
+            )
             img_tensor = img_tensor.cuda()
             with torch.no_grad():
                 results = self.model(img_tensor)
-            results = non_max_suppression(results, conf_thres=0.25, iou_thres=0.5, multi_label=True)
-            img_plotted = plot_images(img_tensor, output_to_target([results[0].detach().cpu()]))
+            results = non_max_suppression(
+                results, conf_thres=0.25, iou_thres=0.5, multi_label=True
+            )
+            img_plotted = plot_images(
+                img_tensor, output_to_target([results[0].detach().cpu()])
+            )
             new_frame = VideoFrame.from_ndarray(img_plotted, format="rgb24")
             new_frame.pts = frame.pts
             new_frame.time_base = frame.time_base
             print(frame.pts)
-            
+
             global data_channel
             if data_channel is not None:
-                data_channel.send('test_message')
-            
+                data_channel.send("test_message")
+
             return new_frame
         else:
             return frame
@@ -143,20 +153,20 @@ async def offer(request):
     # prepare local media
     player = MediaPlayer(os.path.join(ROOT, "demo-instruct.wav"))
     recorder = MediaBlackhole()
-    
-    #data_channel = pc.createDataChannel('data')
+
+    # data_channel = pc.createDataChannel('data')
     global data_channel
     data_channel = None
 
     @pc.on("datachannel")
     def on_datachannel(channel):
-        print('data_channel assigned')
+        print("data_channel assigned")
         global data_channel
         data_channel = channel
         # @channel.on("message")
         # def on_message(message):
-            # if isinstance(message, str) and message.startswith("ping"):
-                # channel.send("pong" + message[4:])
+        # if isinstance(message, str) and message.startswith("ping"):
+        # channel.send("pong" + message[4:])
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
@@ -175,7 +185,9 @@ async def offer(request):
         elif track.kind == "video":
             pc.addTrack(
                 VideoTransformTrack(
-                    relay.subscribe(track), transform=params["video_transform"], datachannel=data_channel
+                    relay.subscribe(track),
+                    transform=params["video_transform"],
+                    datachannel=data_channel,
                 )
             )
 
@@ -215,14 +227,17 @@ app.router.add_get("/client.js", javascript)
 app.router.add_post("/offer", offer)
 
 for route in list(app.router.routes()):
-    cors.add(route, {
-        "*": aiohttp_cors.ResourceOptions(
-            allow_credentials=True,
-            expose_headers="*",
-            allow_headers="*",
-            allow_methods="*"
-        )
-    })
+    cors.add(
+        route,
+        {
+            "*": aiohttp_cors.ResourceOptions(
+                allow_credentials=True,
+                expose_headers="*",
+                allow_headers="*",
+                allow_methods="*",
+            )
+        },
+    )
 
 
 if __name__ == "__main__":
@@ -251,7 +266,7 @@ if __name__ == "__main__":
         ssl_context.load_cert_chain(args.cert_file, args.key_file)
     else:
         ssl_context = None
-    
+
     web.run_app(
         app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context
     )
