@@ -46,5 +46,3 @@ def put_record_to_kinesis(
     response = kinesis_client.put_records(
         Records=[record], StreamName=AWS_DATA_STREAM_NAME
     )
-    # print("payload sent to aws datastream", record)
-    # print("Response from kinesis", response)

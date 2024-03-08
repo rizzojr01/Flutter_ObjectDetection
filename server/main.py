@@ -137,7 +137,6 @@ class VideoTransformTrack(MediaStreamTrack):
             results = non_max_suppression(
                 results, conf_thres=0.25, iou_thres=0.5, multi_label=True
             )
-            # Assuming results[0] contains the detections for the first image
 
             if len(results) > 0 and results[0] is not None:
                 detected_objects = results[0]
