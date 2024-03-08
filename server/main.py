@@ -9,6 +9,7 @@ import uuid
 # os.add_dll_directory('C:/Users/thoma/anaconda3/envs/py38/DLLs') # For aiortc installed in editable mode (need to manually install opus & vpx), and when python cannot detect DLLs (opus, vpx)
 
 import cv2
+import boto3
 from aiohttp import web
 from av import VideoFrame
 import aiohttp_cors
@@ -23,6 +24,24 @@ ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
 pcs = set()
 relay = MediaRelay()
+
+from botocore.credentials import Credentials
+from server_utils.kinesis.utils import put_record_to_kinesis, format_detection_result
+from config import (
+    AWS_ACCESS_KEY,
+    AWS_SECRET_KEY,
+    AWS_REGION,
+    AWS_DATA_STREAM_NAME,
+)
+
+credentials = Credentials(access_key=AWS_ACCESS_KEY, secret_key=AWS_SECRET_KEY)
+
+session = boto3.Session(
+    aws_access_key_id=credentials.access_key,
+    aws_secret_access_key=credentials.secret_key,
+    region_name=AWS_REGION,
+)
+kinesis_client = session.client("kinesis")
 
 
 class VideoTransformTrack(MediaStreamTrack):
@@ -65,7 +84,7 @@ class VideoTransformTrack(MediaStreamTrack):
         print("Hexadecimal: ", hexa_digit)
         print("Estimated Timestamp: ", timestamp)
         # cv2.imwrite("saved_frames/{}.jpg".format(timestamp), img)
-        print(f"{self.transform} ----------------------------------")
+
         if self.transform == "cartoon":
 
             # prepare color
@@ -123,9 +142,10 @@ class VideoTransformTrack(MediaStreamTrack):
             if len(results) > 0 and results[0] is not None:
                 detected_objects = results[0]
                 for *box, conf, cls_id in detected_objects:
-                    class_name = self.model.names[int(cls_id)]
-                    print(class_name)
-
+                    detected_object = self.model.names[int(cls_id)]
+                    print(detected_object)
+                    record = format_detection_result(detected_object)
+                    put_record_to_kinesis(kinesis_client, record, AWS_DATA_STREAM_NAME)
             img_plotted = plot_images(
                 img_tensor, output_to_target([results[0].detach().cpu()])
             )
