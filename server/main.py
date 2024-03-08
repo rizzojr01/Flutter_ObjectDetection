@@ -9,6 +9,7 @@ import uuid
 # os.add_dll_directory('C:/Users/thoma/anaconda3/envs/py38/DLLs') # For aiortc installed in editable mode (need to manually install opus & vpx), and when python cannot detect DLLs (opus, vpx)
 
 import cv2
+import boto3
 from aiohttp import web
 from av import VideoFrame
 import aiohttp_cors
@@ -23,6 +24,24 @@ ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
 pcs = set()
 relay = MediaRelay()
+
+from botocore.credentials import Credentials
+from server_utils.kinesis.utils import put_record_to_kinesis, format_detection_result
+from config import (
+    AWS_ACCESS_KEY,
+    AWS_SECRET_KEY,
+    AWS_REGION,
+    AWS_DATA_STREAM_NAME,
+)
+
+credentials = Credentials(access_key=AWS_ACCESS_KEY, secret_key=AWS_SECRET_KEY)
+
+session = boto3.Session(
+    aws_access_key_id=credentials.access_key,
+    aws_secret_access_key=credentials.secret_key,
+    region_name=AWS_REGION,
+)
+kinesis_client = session.client("kinesis")
 
 
 class VideoTransformTrack(MediaStreamTrack):
@@ -64,7 +83,7 @@ class VideoTransformTrack(MediaStreamTrack):
             timestamp += 8**i * digit
         print("Hexadecimal: ", hexa_digit)
         print("Estimated Timestamp: ", timestamp)
-        cv2.imwrite("saved_frames/{}.jpg".format(timestamp), img)
+        # cv2.imwrite("saved_frames/{}.jpg".format(timestamp), img)
 
         if self.transform == "cartoon":
 
@@ -108,12 +127,24 @@ class VideoTransformTrack(MediaStreamTrack):
             img_tensor = (
                 torch.tensor(img).unsqueeze(0).permute(0, 3, 1, 2).float() / 255.0
             )
-            img_tensor = img_tensor.cuda()
+            # Check if CUDA is available and use the appropriate device
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            img_tensor = img_tensor.to(device)
+            self.model.to(device)
+
             with torch.no_grad():
                 results = self.model(img_tensor)
             results = non_max_suppression(
                 results, conf_thres=0.25, iou_thres=0.5, multi_label=True
             )
+
+            if len(results) > 0 and results[0] is not None:
+                detected_objects = results[0]
+                for *box, conf, cls_id in detected_objects:
+                    detected_object = self.model.names[int(cls_id)]
+                    print(detected_object)
+                    record = format_detection_result(detected_object)
+                    put_record_to_kinesis(kinesis_client, record, AWS_DATA_STREAM_NAME)
             img_plotted = plot_images(
                 img_tensor, output_to_target([results[0].detach().cpu()])
             )
